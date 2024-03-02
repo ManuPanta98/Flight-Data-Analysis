@@ -4,4 +4,4 @@ class FlightAnalysis:
         
 analysis = FlightAnalysis()
 
-class pisello
+class ciao
