@@ -6,3 +6,4 @@ analysis = FlightAnalysis()
 
 class ciao:
     def __init__(bo)
+    def __init__(ciaoo)
