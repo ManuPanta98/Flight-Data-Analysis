@@ -4,4 +4,5 @@ class FlightAnalysis:
         
 analysis = FlightAnalysis()
 
-class ciao
+class ciao:
+    def __init__(bo)
