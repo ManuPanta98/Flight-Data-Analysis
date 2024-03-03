@@ -2,10 +2,9 @@
 from typing import Optional
 import os
 import requests
-from pydantic import BaseModel
 import pandas as pd
 import zipfile
-from io import BytesIO
+from io import BytesI0
 
 # Corrected and updated class definition
 class FlightAnalysis:
@@ -60,4 +59,5 @@ class FlightAnalysis:
         # Adjust according to actual dataset columns
         cleaned_df = df.drop(columns=['unnecessary_column'], errors='ignore')
         return cleaned_df
-
+    
+analyzer = FlightAnalysis()
