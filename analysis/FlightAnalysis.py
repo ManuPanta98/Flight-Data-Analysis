@@ -8,20 +8,13 @@ import zipfile
 from io import BytesIO
 
 # Corrected and updated class definition
-class FlightAnalysisCorrected:
+class FlightAnalysis:
     """
     A class to analyze flight data, compliant with PEP8 standards and uses static type
     checking where applicable. It downloads a data file during initialization if the file does not
     already exist in the specified downloads directory and reads the dataset into a pandas DataFrame.
     """
-    
-    class Config(BaseModel):
-        """
-        Configuration for FlightAnalysis, used for type checking with Pydantic.
-        Include any configuration parameters here.
-        """
-        # Correct usage of default value for a BaseModel field
-        data_url: str = "https://gitlab.com/adpro1/adpro2024/-/raw/main/Files/flight_data.zip?inline=false"
+    data_url: str = "https://gitlab.com/adpro1/adpro2024/-/raw/main/Files/flight_data.zip?inline=false"
     
     def __init__(self, config: Config = Config()):
         """
