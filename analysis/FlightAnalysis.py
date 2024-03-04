@@ -6,8 +6,9 @@ import zipfile
 import io
 import os
 from tqdm import tqdm
+from distance_calculator import calculate_distance
 
-class FlightDataAnalysis(BaseModel):
+class FlightAnalysis(BaseModel):
     class Config:
         """arbitrary_types_allowed to True enables the model to also include 
         types like pandas DataFrames"""
@@ -52,3 +53,34 @@ class FlightDataAnalysis(BaseModel):
 
     def __str__(self):
         return f"FlightDataAnalysis created on {self.date_created}, using data from {self.data_url}"
+
+    def update_route_distances(self, save=False, path=None):
+            # This method now needs to calculate distances using the actual coordinates.
+            # Assuming your `airport_data` DataFrame has 'Latitude' and 'Longitude' columns.
+            if path:
+                self.flight_routes = pd.read_csv(path)
+            else:
+                # Modify this part to calculate real distances
+                def get_distance(row):
+                    source_airport = self.airport_data.loc[self.airport_data['Airport ID'] == row['Source airport ID']]
+                    dest_airport = self.airport_data.loc[self.airport_data['Airport ID'] == row['Destination airport ID']]
+                    if not source_airport.empty and not dest_airport.empty:
+                        return calculate_distance(
+                            source_airport.iloc[0]['Latitude'], source_airport.iloc[0]['Longitude'],
+                            dest_airport.iloc[0]['Latitude'], dest_airport.iloc[0]['Longitude']
+                        )
+                    else:
+                        return None
+
+                self.flight_routes['Distance'] = self.flight_routes.apply(get_distance, axis=1)
+                if save:
+                    self.flight_routes.to_csv("./downloads/updated_routes.csv", index=False)
+
+
+
+if __name__ == "__main__":
+    analysis = FlightAnalysis()  # Create an instance of the class
+    analysis.update_route_distances(save=True)  # Call the method to update route distances
+
+    # Print the first few rows of the flight_routes DataFrame to check distances
+    print(analysis.flight_routes.head())
