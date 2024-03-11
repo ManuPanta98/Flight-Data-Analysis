@@ -15,13 +15,3 @@ def calculate_distance(lat1, lon1, lat2, lon2):
     
     distance = R * c
     return distance
-
-# Add this at the bottom of distance_calculator.py
-if __name__ == "__main__":
-    # Example coordinates for two locations
-    lat1, lon1 = 40.7128, -74.0060  # New York
-    lat2, lon2 = 51.5074, -0.1278   # London
-
-    # Call the function and print the result
-    distance = calculate_distance(lat1, lon1, lat2, lon2)
-    print(f"The distance is {distance} kilometers.")
