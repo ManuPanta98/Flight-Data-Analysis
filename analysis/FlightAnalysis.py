@@ -124,7 +124,7 @@ class FlightAnalysis(BaseModel):
             self.flight_routes.to_csv(save_path, index=False)
 
 
-    #Method 3.1
+    #Method 1
     def plot_airports_by_country(self, country_name):
         
             country_airports = self.airport_data[self.airport_data["Country"] == country_name]
@@ -162,7 +162,7 @@ class FlightAnalysis(BaseModel):
         return f"FlightDataAnalysis created on {self.date_created}, using data from {self.data_url}"
     
     
-    # Method 3.2
+    # Method 2
     def distance_analysis(self, display_plot=True, save_plot=False, filename='flight_distance_distribution.png'):
         """
         Plot a histogram of the distribution of flight distances for all flights.
@@ -194,7 +194,7 @@ class FlightAnalysis(BaseModel):
                 print("Flight distance data is not available.")
     
     
-    #Method 3.3
+    #Method 3
 
     def plot_flights_from_airport(self, airport: str, internal: bool = False):
         """
@@ -252,7 +252,7 @@ class FlightAnalysis(BaseModel):
         plt.legend(loc='upper left')
         plt.show()
 
-    # Method 3.4
+    # Method 4
 
     def plot_top_airplane_models(self, countries=None, N=5):
         """
@@ -288,7 +288,7 @@ class FlightAnalysis(BaseModel):
         plt.show()
 
 
-    # Method 3.5
+    # Method 5
 
     def plot_flights_on_map(self, country: str, internal: bool = False):
         """
@@ -338,3 +338,120 @@ class FlightAnalysis(BaseModel):
         ax.set_global()
         ax.set_title(f"Flights from {country}")
         plt.show()
+        
+    # Method 6
+    
+    def __str__(self):
+        """
+        Returns a string representation of the FlightDataAnalysis instance.
+
+        Returns:
+            str: A string indicating when the FlightDataAnalysis instance was created and the data source URL.
+        """
+        return f"FlightDataAnalysis created on {self.date_created}, using data from {self.data_url}"
+
+    def aircrafts(self):
+        """
+        Prints a list of unique aircraft models contained in the dataset.
+
+        This method retrieves the unique names of aircraft models from the 'Name' column in the 'aircraft_data'
+        DataFrame attribute and prints them to the console.
+
+        Returns:
+            None: This method does not return any value; it outputs directly to the console.
+        """
+        aircraft_models = self.aircraft_data['Name'].unique()
+        print("List of Aircraft Models:")
+        for model in aircraft_models:
+            print(model) 
+            
+    # Method 7
+    
+    def aircraft_info(self, aircraft_name: str):
+        """
+        Retrieves and prints information about a specified aircraft model.
+
+        This method checks if the given aircraft name exists within the 'Name' column of the 'aircraft_data'
+        attribute. If the aircraft name is not found, it raises a ValueError with a message indicating the issue
+        and providing a list of valid aircraft model names from the dataset. If the aircraft name exists, it
+        constructs a prompt and sends it to the OpenAI Chat model to get information about the aircraft, which
+        is then printed to the console.
+
+        Parameters:
+            aircraft_name (str): The name of the aircraft model for which information is requested.
+
+        Raises:
+            ValueError: If the specified aircraft_name is not present in the list of available aircraft models.
+
+        Returns:
+            None: This method prints the response content to the console and does not return any value.
+        """
+        if aircraft_name not in self.aircraft_data['Name'].values:
+            available_models = self.aircraft_data['Name'].unique()
+            guidance = (
+                f"The specified aircraft name '{aircraft_name}' is not in the list of available aircraft models. "
+                f"Please choose from the following list of models: {', '.join(available_models)}"
+            )
+            raise ValueError(guidance)
+        
+        llm = ChatOpenAI(temperature=0.1)
+        prompt = f"Give me information about the aircraft model named {aircraft_name}."
+        response = llm.invoke(prompt)
+        print(response.content)
+        
+    # Method 8
+
+    def aircraft_info_markdown(self, aircraft_name: str):
+        """
+        Generates markdown content with information about a specified aircraft model by invoking the OpenAI Chat model.
+
+        This method checks if the specified aircraft name exists in the dataset. If the aircraft name is not found,
+        it raises a ValueError with guidance for choosing a valid aircraft model from the available data. If the
+        aircraft name is found, it sends a prompt to the OpenAI Chat model to retrieve information about that aircraft.
+
+        Parameters:
+        aircraft_name (str): The name of the aircraft model to retrieve information for.
+
+        Raises:
+        ValueError: If the specified aircraft_name is not found in the list of available aircraft models.
+
+        Returns:
+        None: This method does not return. It displays the markdown content in the current Jupyter notebook cell.
+        """
+        if aircraft_name not in self.aircraft_data['Name'].values:
+            available_models = self.aircraft_data['Name'].unique()
+            guidance = (
+                f"The specified aircraft name '{aircraft_name}' is not in the list of available aircraft models. "
+                f"Please choose from the following list of models: {', '.join(available_models)}"
+            )
+            raise ValueError(guidance)
+        
+        llm = ChatOpenAI(temperature=0.1)
+        prompt = f"Give me information about the aircraft model named {aircraft_name}."
+        response = llm.invoke(prompt)
+        display(Markdown(response.content))
+
+    # Method 9
+    
+    def airport_info(self, airport_name: str):
+        """
+        Retrieves and prints information about the specified airport.
+
+        This method sends a prompt to the OpenAI Chat model requesting information about the airport
+        with the given name. It then prints the content of the response to the console. The Chat model's
+        temperature is set to 0.1 to prioritize deterministic, informative responses.
+
+        Parameters:
+        airport_name (str): The name of the airport to retrieve information about.
+
+        Returns:
+        None: This method prints the response content to the console and does not return any value.
+        """
+        llm = ChatOpenAI(temperature=0.1)
+        prompt = f"Give me information about the airport named {airport_name}."
+        response = llm.invoke(prompt)
+        print(response.content)
+    
+    # Method 10
+    
+     
