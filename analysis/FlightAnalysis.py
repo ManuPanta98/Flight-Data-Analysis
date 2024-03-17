@@ -11,6 +11,9 @@ from distance_calculator import calculate_distance
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature 
 import geopandas as gpd
+from langchain_openai import ChatOpenAI
+from IPython.display import Markdown
+import cartopy.io.shapereader as shpreader
 
 
 class FlightAnalysis(BaseModel):
@@ -127,36 +130,36 @@ class FlightAnalysis(BaseModel):
     #Method 1
     def plot_airports_by_country(self, country_name):
         
-        country_airports = self.airport_data[self.airport_data["Country"] == country_name]
-        """
-        Plot the airports located in a specific country using geopandas.
-    
-        Args:
-            country_name (str): The name of the country for which to plot the airports.
-        """
-        # Method implementation ...
-        if country_airports.empty:
-            print(f"No airports found in {country_name}. Please check the country name and try again.")
-            return
+            country_airports = self.airport_data[self.airport_data["Country"] == country_name]
+            """
+            Plot the airports located in a specific country using geopandas.
         
-        world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
-        country_map = world[world.name == country_name]
+            Args:
+                country_name (str): The name of the country for which to plot the airports.
+            """
+            # Method implementation ...
+            if country_airports.empty:
+                print(f"No airports found in {country_name}. Please check the country name and try again.")
+                return
+            
+            world = gpd.read_file(gpd.datasets.get_path('naturalearth_lowres'))
+            country_map = world[world.name == country_name]
 
-        if country_map.empty:
-            print(f"Country {country_name} not found in the map dataset. Please check the country name and try again.")
-            return
+            if country_map.empty:
+                print(f"Country {country_name} not found in the map dataset. Please check the country name and try again.")
+                return
 
-        gdf = gpd.GeoDataFrame(country_airports, geometry=gpd.points_from_xy(country_airports.Longitude, country_airports.Latitude))
+            gdf = gpd.GeoDataFrame(country_airports, geometry=gpd.points_from_xy(country_airports.Longitude, country_airports.Latitude))
 
-        fig, ax = plt.subplots(figsize=(10, 10))
-        country_map.plot(ax=ax, color='lightgrey')
-        gdf.plot(ax=ax, color='red', marker='o', markersize=50, label='Airports')
+            fig, ax = plt.subplots(figsize=(10, 10))
+            country_map.plot(ax=ax, color='lightgrey')
+            gdf.plot(ax=ax, color='red', marker='o', markersize=50, label='Airports')
 
-        plt.title(f"Airports in {country_name}")
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
-        plt.legend()
-        plt.show()
+            plt.title(f"Airports in {country_name}")
+            plt.xlabel('Longitude')
+            plt.ylabel('Latitude')
+            plt.legend()
+            plt.show()
                    
     def __str__(self):
         return f"FlightDataAnalysis created on {self.date_created}, using data from {self.data_url}"
@@ -194,7 +197,7 @@ class FlightAnalysis(BaseModel):
                 print("Flight distance data is not available.")
     
     
-    #Method 3
+    # Method 3
 
     def plot_flights_from_airport(self, airport: str, internal: bool = False):
         """
@@ -216,13 +219,25 @@ class FlightAnalysis(BaseModel):
         airport_coords = airport_info[['Longitude', 'Latitude']].iloc[0]
         airport_id = airport_info['Airport ID'].iloc[0]
         airport_country = airport_info['Country'].iloc[0]
-
-        # Set up the map
+        
+        # Add Natural Earth data for higher resolution and country names
         fig = plt.figure(figsize=(15, 10))
         ax = plt.axes(projection=ccrs.PlateCarree())
         ax.add_feature(cfeature.COASTLINE)
         ax.add_feature(cfeature.BORDERS, linestyle=':')
+        ax.add_feature(cfeature.LAND.with_scale('50m'), alpha=0.5)
+        ax.add_feature(cfeature.OCEAN.with_scale('50m'))
+        ax.add_feature(cfeature.LAKES.with_scale('50m'))
+        ax.add_feature(cfeature.RIVERS.with_scale('50m'))
         ax.set_global()
+
+        ne_10m_admin_0_countries = shpreader.natural_earth(resolution='10m', category='cultural', name='admin_0_countries')
+        country_boundaries = shpreader.Reader(ne_10m_admin_0_countries)
+        country = None
+        for country_feature in country_boundaries.records():
+            if country_feature.attributes['NAME_LONG'] == airport_country:
+                country = country_feature
+                break
 
         # Plot the airport location
         ax.plot(airport_coords['Longitude'], airport_coords['Latitude'], 
@@ -246,6 +261,15 @@ class FlightAnalysis(BaseModel):
             ax.plot([airport_coords['Longitude'], dest_coords['Longitude']], 
                     [airport_coords['Latitude'], dest_coords['Latitude']], 
                     color='blue', linewidth=1, marker='', transform=ccrs.Geodetic())
+        if internal and country is not None:
+            # Zoom into the country's extent if internal flights are plotted
+            bounds = country.geometry.bounds
+            padding = 1.0  # degrees of padding, you might need to adjust this
+            extent = [bounds[0] - padding, bounds[2] + padding, bounds[1] - padding, bounds[3] + padding]
+            ax.set_extent(extent, crs=ccrs.PlateCarree())
+        else:
+            # Otherwise, use a global extent
+            ax.set_global()
 
         # Customize the plot
         ax.set_title(f"Flights from {airport}", pad=20)
@@ -286,57 +310,93 @@ class FlightAnalysis(BaseModel):
         plt.ylabel("Number of Routes")
         plt.grid(axis="y", linestyle="--", alpha=0.7)
         plt.show()
-
+        
+    
 
     # Method 5
 
-    def plot_flights_on_map(self, country: str, internal: bool = False):
+    def plot_flights_on_map(self, country: str, internal: bool = False, cutoff_distance: float = 1000):
         """
-        Plot flight routes from or within a specified country on a world map using Cartopy.
-        If internal is True, only plot internal flights within the same country.
-        
-        Args:
-            country (str): The name of the country.
-            internal (bool): Whether to plot only internal flights. Defaults to False.
-        """
-        # Method implementation ...
-        
-        if country not in self.airport_data['Country'].values:
-            print(f"Country '{country}' not found.")
-            return
+        Plots flight routes on a world map, differentiating between short-haul and long-haul flights.
 
-        # Get all airport IDs in the specified country
+        This method uses Cartopy to plot flight routes originating from or within a specified country, marking 
+        the routes with different colors based on whether they are shorter or longer than a specified cutoff distance. 
+        The method aims to provide visual insights into flight patterns, with an additional focus on environmental 
+        considerations by calculating and displaying potential CO2 emissions reductions if short-haul flights were 
+        replaced with rail transport.
+
+        Parameters:
+        country (str): The name of the country from which to plot flights.
+            internal (bool, optional): If True, only plots internal flights within the specified country. 
+                                    Defaults to False, which includes all flights departing from the country.
+            cutoff_distance (float, optional): The distance in kilometers used to distinguish between short-haul 
+                                            and long-haul flights. Defaults to 1000 km.
+
+            Note:
+            The emissions calculations are based on generalized CO2 emissions factors for flight and rail transport 
+            and are intended to provide a simple comparative analysis. Actual emissions can vary based on numerous 
+            factors, including aircraft type, occupancy, and specific rail transport efficiencies.
+        """   
+        import matplotlib.pyplot as plt
+        import cartopy.crs as ccrs
+        import cartopy.feature as cfeature
+        
         country_airports = self.airport_data[self.airport_data["Country"] == country]
+        
+        # Initialize the distances outside the conditional statement
+        short_haul_distance = 0
+        long_haul_distance = 0
 
-        # Filter flights
         if internal:
-            # Internal flights: source and destination both within country
             filtered_flights = self.flight_routes[
                 (self.flight_routes["Source airport ID"].isin(country_airports["Airport ID"])) &
                 (self.flight_routes["Destination airport ID"].isin(country_airports["Airport ID"]))
             ]
         else:
-            # All flights departing from the country
             filtered_flights = self.flight_routes[
                 self.flight_routes["Source airport ID"].isin(country_airports["Airport ID"])
             ]
-
-        # Initialize the plot using Cartopy
+            
         fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={'projection': ccrs.PlateCarree()})
-        ax.add_feature(cfeature.COASTLINE)
-        ax.add_feature(cfeature.BORDERS, linestyle=':')
+        ax.add_feature(cfeature.COASTLINE, linewidth=0.1)
+        ax.add_feature(cfeature.BORDERS, linestyle='-', linewidth=0.1)
+        ax.add_feature(cfeature.OCEAN)
+        ax.add_feature(cfeature.LAND, edgecolor='black')
 
-        # Plot each flight
-        for index, flight in filtered_flights.iterrows():
+        for _, flight in filtered_flights.iterrows():
             source = country_airports[country_airports["Airport ID"] == flight["Source airport ID"]].iloc[0]
             dest = self.airport_data[self.airport_data["Airport ID"] == flight["Destination airport ID"]].iloc[0]
 
-            # Draw a line between source and destination
-            plt.plot([source["Longitude"], dest["Longitude"]], [source["Latitude"], dest["Latitude"]],
-                     color='blue', linewidth=1, marker='o', transform=ccrs.Geodetic())
+            # Assume calculate_distance is a defined function that calculates distance between two points
+            distance = calculate_distance(source["Latitude"], source["Longitude"], dest["Latitude"], dest["Longitude"])
 
-        ax.set_global()
-        ax.set_title(f"Flights from {country}")
+            if distance <= cutoff_distance:
+                short_haul_distance += distance
+                color = 'blue'
+            else:
+                long_haul_distance += distance
+                color = 'darkorange'
+
+            plt.plot([source["Longitude"], dest["Longitude"]], [source["Latitude"], dest["Latitude"]],
+                    color=color, linewidth=1, marker='o', transform=ccrs.Geodetic())
+
+            ax.set_global()
+            ax.set_title(f"Flights from {country}: Blue = Short-haul (<= {cutoff_distance}km), Dark Orange = Long-haul")
+
+        # Calculate and display emissions information
+        flight_emissions_per_km = 133  # grams of CO2 equivalents per passenger kilometer for flights
+        rail_emissions_per_km = 7     # grams of CO2 per passenger kilometer for rails
+        total_flight_emissions = (short_haul_distance * flight_emissions_per_km + long_haul_distance * flight_emissions_per_km) / 1e6  # Convert to metric tonnes
+        total_rail_emissions = (short_haul_distance * rail_emissions_per_km) / 1e6  # Convert to metric tonnes
+        emissions_reduction = total_flight_emissions - (total_rail_emissions + long_haul_distance * flight_emissions_per_km / 1e6)
+
+        plt.text(0.05, 1.0, f"Total CO2 emissions (flights): {total_flight_emissions:.2f} tonnes",
+        transform=ax.transAxes, backgroundcolor='white', verticalalignment='top')
+        plt.text(0.05, 0.95, f"Potential CO2 emissions (replacing short-haul with rails): {(total_rail_emissions + long_haul_distance * flight_emissions_per_km / 1e6):.2f} tonnes",
+        transform=ax.transAxes, backgroundcolor='white', verticalalignment='top')
+        plt.text(0.05, 0.90, f"Potential reduction in CO2 emissions: {emissions_reduction:.2f} tonnes",
+        transform=ax.transAxes, backgroundcolor='white', verticalalignment='top')
+
         plt.show()
         
     # Method 6
@@ -386,7 +446,7 @@ class FlightAnalysis(BaseModel):
             raise ValueError(guidance)
         
         llm = ChatOpenAI(temperature=0.1)
-        prompt = f"Give me information about the aircraft model named {aircraft_name}."
+        prompt = f"Give me information about the aircraft model named {aircraft_name}. In the form of specification table with 2 columns: specification and value"
         response = llm.invoke(prompt)
         print(response.content)
         
@@ -418,7 +478,7 @@ class FlightAnalysis(BaseModel):
             raise ValueError(guidance)
         
         llm = ChatOpenAI(temperature=0.1)
-        prompt = f"Give me information about the aircraft model named {aircraft_name}."
+        prompt = f"Give me information about the aircraft model named {aircraft_name} in the form of specification table with 2 columns: specification and value."
         response = llm.invoke(prompt)
         display(Markdown(response.content))
 
@@ -439,88 +499,6 @@ class FlightAnalysis(BaseModel):
         None: This method prints the response content to the console and does not return any value.
         """
         llm = ChatOpenAI(temperature=0.1)
-        prompt = f"Give me information about the airport named {airport_name}."
+        prompt = f"Give me information about the airport named {airport_name} in the form of specification table with 2 columns: specification and value."
         response = llm.invoke(prompt)
         print(response.content)
-    
-    # Method 10
-    
-    def plot_flights_on_map(self, country: str, internal: bool = False, cutoff_distance: float = 1000):
-        """
-        Plots flight routes on a world map, differentiating between short-haul and long-haul flights.
-
-        This method uses Cartopy to plot flight routes originating from or within a specified country, marking 
-        the routes with different colors based on whether they are shorter or longer than a specified cutoff distance. 
-        The method aims to provide visual insights into flight patterns, with an additional focus on environmental 
-        considerations by calculating and displaying potential CO2 emissions reductions if short-haul flights were 
-        replaced with rail transport.
-
-        Parameters:
-            country (str): The name of the country from which to plot flights.
-            internal (bool, optional): If True, only plots internal flights within the specified country. 
-                                       Defaults to False, which includes all flights departing from the country.
-            cutoff_distance (float, optional): The distance in kilometers used to distinguish between short-haul 
-                                               and long-haul flights. Defaults to 1000 km.
-
-        Note:
-            The emissions calculations are based on generalized CO2 emissions factors for flight and rail transport 
-            and are intended to provide a simple comparative analysis. Actual emissions can vary based on numerous 
-            factors, including aircraft type, occupancy, and specific rail transport efficiencies.
-        """   
-        country_airports = self.airport_data[self.airport_data["Country"] == country]
-    
-        if internal:
-            filtered_flights = self.flight_routes[
-                (self.flight_routes["Source airport ID"].isin(country_airports["Airport ID"])) &
-                (self.flight_routes["Destination airport ID"].isin(country_airports["Airport ID"]))
-            ]
-        else:
-            filtered_flights = self.flight_routes[
-                self.flight_routes["Source airport ID"].isin(country_airports["Airport ID"])
-            ]
-
-        fig, ax = plt.subplots(figsize=(15, 8), subplot_kw={'projection': ccrs.PlateCarree()})
-        ax.add_feature(cfeature.COASTLINE, linewidth=0.1)
-        ax.add_feature(cfeature.BORDERS, linestyle='-', linewidth=0.1)
-        ax.add_feature(cfeature.OCEAN)
-        ax.add_feature(cfeature.LAND, edgecolor='black')
-
-        short_haul_distance = 0
-        long_haul_distance = 0
-
-        for _, flight in filtered_flights.iterrows():
-            source = country_airports[country_airports["Airport ID"] == flight["Source airport ID"]].iloc[0]
-            dest = self.airport_data[self.airport_data["Airport ID"] == flight["Destination airport ID"]].iloc[0]
-
-            # Replace the call to haversine with calculate_distance
-            distance = calculate_distance(source["Latitude"], source["Longitude"], dest["Latitude"], dest["Longitude"])
-
-            if distance <= cutoff_distance:
-                short_haul_distance += distance
-                color = 'blue'
-            else:
-                long_haul_distance += distance
-                color = 'darkorange'
-
-            plt.plot([source["Longitude"], dest["Longitude"]], [source["Latitude"], dest["Latitude"]],
-                     color=color, linewidth=1, marker='o', transform=ccrs.Geodetic())
-
-        ax.set_global()
-        ax.set_title(f"Flights from {country}: Blue = Short-haul (<= {cutoff_distance}km), Dark Orange = Long-haul")
-
-        # Calculate and display emissions information
-        flight_emissions_per_km = 133  # grams of CO2 equivalents per passenger kilometer for flights
-        rail_emissions_per_km = 7     # grams of CO2 per passenger kilometer for rails
-        total_flight_emissions = (short_haul_distance * flight_emissions_per_km + long_haul_distance * flight_emissions_per_km) / 1e6  # Convert to metric tonnes
-        total_rail_emissions = (short_haul_distance * rail_emissions_per_km) / 1e6  # Convert to metric tonnes
-        emissions_reduction = total_flight_emissions - (total_rail_emissions + long_haul_distance * flight_emissions_per_km / 1e6)
-
-        plt.text(0.05, 1.0, f"Total CO2 emissions (flights): {total_flight_emissions:.2f} tonnes",
-         transform=ax.transAxes, backgroundcolor='white', verticalalignment='top')
-        plt.text(0.05, 0.95, f"Potential CO2 emissions (replacing short-haul with rails): {(total_rail_emissions + long_haul_distance * flight_emissions_per_km / 1e6):.2f} tonnes",
-         transform=ax.transAxes, backgroundcolor='white', verticalalignment='top')
-        plt.text(0.05, 0.90, f"Potential reduction in CO2 emissions: {emissions_reduction:.2f} tonnes",
-         transform=ax.transAxes, backgroundcolor='white', verticalalignment='top')
-
-        plt.show()
-     
