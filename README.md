@@ -48,3 +48,4 @@ The visual shows the flights flight routes originating from Germany. As in the 3
 - Giulia Pepe: <a href="61909@novasbe.pt">61909@novasbe.pt</a>
 - Federica Palermo: <a href="60117@novasbe.pt">60117@novasbe.pt</a>
 - Elena Gradoli: <a href="61781@novasbe.pt">61678@novasbe.pt</a>
+
